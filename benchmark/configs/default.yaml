@@ -1,0 +1,64 @@
+capture:
+  ir_width: 848
+  ir_height: 480
+  ir_fps: 30
+  color_width: 640
+  color_height: 480
+  color_fps: 30
+  depth_width: 848
+  depth_height: 480
+  depth_fps: 30
+  align_depth_to: color
+  emitter_enabled: false
+  duration_s: 30
+  warmup_frames: 30
+
+models:
+  ffs:
+    enabled: true
+    repo_root: ../Fast-FoundationStereo
+    weights: weights/23-36-37/model_best_bp2_serialize.pth
+    cfg: weights/23-36-37/cfg.yaml
+    valid_iters: 8
+    max_disp: 192
+    optimize_build_volume: pytorch1
+    fp16: true
+    target_frame: ir_left
+  s2m2:
+    enabled: true
+    repo_root: ../s2m2
+    weights_dir: weights/pretrain_weights
+    model_type: S
+    refine_iter: 3
+    use_positivity: true
+    fp16: true
+    target_frame: ir_left
+  lingbot:
+    enabled: true
+    repo_root: ../lingbot-depth
+    hf_repo_id: robbyant/lingbot-depth-pretrain-vitl-14-v0.5
+    resolution_level: 9
+    use_fp16: true
+    apply_mask: true
+    target_frame: color
+  realsense_hw:
+    enabled: true
+    target_frame: color
+
+run:
+  warmup: 15
+  max_frames: null
+  save_npy: true
+  save_disp: true
+  save_conf: false
+  device: cuda
+
+metrics:
+  near_band:
+    min_m: 0.2
+    max_m: 3.0
+  flat_plane_roi: null
+  ground_plane_roi: null
+  static_segment:
+    start_frame: 0
+    end_frame: null

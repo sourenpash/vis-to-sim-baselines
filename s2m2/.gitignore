@@ -1,0 +1,14 @@
+# Downloaded checkpoints live under weights/pretrain_weights/ (see README)
+weights/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+
+.DS_Store

@@ -1,0 +1,42 @@
+# --- Model checkpoints, weights, exported graphs (never commit large binaries) ---
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+*.engine
+*.plan
+*.trt
+*.mlmodel
+*.tflite
+*.pb
+*.h5
+
+# Packed / archive artifacts often used for model releases (uncomment if you never commit these)
+# *.tar
+# *.zip
+
+# Common local dirs that accumulate downloaded checkpoints (explicit; does not rely on *.pth only)
+**/pretrain_weights/
+**/pretrained/
+**/checkpoint*/
+
+# Python / tooling noise
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.so
+.Python
+.idea/
+.vscode/
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
