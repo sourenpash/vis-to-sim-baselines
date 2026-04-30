@@ -124,6 +124,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
              "Measure your printed tag with a ruler. The rgov/apriltag-pdfs "
              "default at scale=1 is ~0.080 m.",
     )
+    p.add_argument(
+        "--tag-id", type=int, default=None,
+        help="If set, only this tag36h11 ID is used as ground truth "
+             "(others in view are still drawn but ignored for metrics). "
+             "Default: use whichever tag is detected first each frame.",
+    )
 
     p.add_argument(
         "--log", type=str, default=None,
@@ -401,30 +407,40 @@ def reprojection_error_px(
     z=0) through the estimated (R, t) pose with the camera intrinsics, and
     returns the average L2 distance to the detected pixel corners.
 
-    Useful as a single-number sanity check: if this is large it means the
-    intrinsics, the tag size, or the detector subpixel localization are
-    inconsistent. Returns NaN if any projected point is behind the camera.
+    The pose returned by pupil_apriltags (X_cam = R @ X_tag + t) is
+    unambiguous, but the ordering of detection.corners[0..3] vs the model
+    corners (-s,-s) (s,-s) (s,s) (-s,s) is *not* consistent across
+    upstream apriltag forks (the y-axis sign of the tag-local frame
+    differs between apriltag2 / apriltag3 / pupil_apriltags). Rather than
+    pick one and pray, we evaluate both candidate orderings (mirrored on
+    the y-axis of the tag plane) and take whichever matches the detected
+    corners. Since the pose is unique, exactly one ordering can produce a
+    near-zero residual; the other will produce a residual on the order of
+    the tag's pixel size, which would otherwise masquerade as miscalibration.
+    Returns NaN if any projected point is behind the camera.
     """
     s = tag_size_m / 2.0
-    # pupil_apriltags returns corners CCW starting at bottom-left in image,
-    # which corresponds to tag-frame corners in this order (z=0 on the tag).
-    pts_tag = np.array(
-        [[-s, -s, 0.0],
-         [+s, -s, 0.0],
-         [+s, +s, 0.0],
-         [-s, +s, 0.0]],
-        dtype=np.float64,
-    )
     R = obs.pose_R
     t = obs.pose_t_m.reshape(3)
-    pts_cam = pts_tag @ R.T + t  # (4, 3)
-    z = pts_cam[:, 2]
-    if not np.all(z > 1e-6):
-        return float("nan")
-    u = calib.fx * pts_cam[:, 0] / z + calib.cx
-    v = calib.fy * pts_cam[:, 1] / z + calib.cy
-    proj = np.stack([u, v], axis=1)  # (4, 2)
-    return float(np.linalg.norm(proj - obs.corners_orig, axis=1).mean())
+    pts_a = np.array(
+        [[-s, -s, 0.0], [+s, -s, 0.0], [+s, +s, 0.0], [-s, +s, 0.0]],
+        dtype=np.float64,
+    )
+    pts_b = pts_a[::-1].copy()  # y-flipped (= reversed) sibling ordering
+
+    best = float("inf")
+    for pts_tag in (pts_a, pts_b):
+        pts_cam = pts_tag @ R.T + t
+        z = pts_cam[:, 2]
+        if not np.all(z > 1e-6):
+            continue
+        u = calib.fx * pts_cam[:, 0] / z + calib.cx
+        v = calib.fy * pts_cam[:, 1] / z + calib.cy
+        proj = np.stack([u, v], axis=1)
+        err = float(np.linalg.norm(proj - obs.corners_orig, axis=1).mean())
+        if err < best:
+            best = err
+    return best if best != float("inf") else float("nan")
 
 
 def sample_depth_at(
@@ -575,7 +591,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             families="tag36h11", nthreads=2,
             quad_decimate=1.0, refine_edges=True,
         )
-        logging.info(f"AprilTag detector: tag36h11, tag_size={args.tag_size:.4f} m")
+        if args.tag_id is None:
+            logging.info(
+                f"AprilTag detector: tag36h11, tag_size={args.tag_size:.4f} m, "
+                f"id_filter=any (using first tag detected each frame)"
+            )
+        else:
+            logging.info(
+                f"AprilTag detector: tag36h11, tag_size={args.tag_size:.4f} m, "
+                f"id_filter={args.tag_id}"
+            )
 
     logger: Optional[CSVLogger] = None
     if args.log:
@@ -602,6 +627,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     rel_errs: List[float] = []
     reproj_errs: List[float] = []
     n_frames_with_tag = 0
+    seen_tag_ids: set = set()
 
     t_start = time.perf_counter()
 
@@ -635,6 +661,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             if detector is not None:
                 obs_list = detect_tag(detector, ir_l, calib, args.tag_size)
 
+            for o in obs_list:
+                if o.tag_id not in seen_tag_ids:
+                    seen_tag_ids.add(o.tag_id)
+                    logging.info(f"  saw tag36h11 id={o.tag_id} for the first time")
+
+            if args.tag_id is not None:
+                obs_list = [o for o in obs_list if o.tag_id == args.tag_id]
             primary_obs: Optional[TagObservation] = obs_list[0] if obs_list else None
             pred_z: Optional[float] = None
             gt_z: Optional[float] = None
@@ -708,6 +741,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                         )
                     rep_str = f"{reproj_px:.2f} px" if reproj_px is not None else "n/a"
                     hud_lines.append(f"reproj {rep_str}  (intrinsics+tag-size sanity)")
+                    # If reprojection error is huge AND pred disagrees with PnP
+                    # gt_z by a clean ratio, the user's --tag-size is almost
+                    # certainly wrong. Suggest the corrected value.
+                    if (reproj_px is not None and reproj_px > 5.0
+                            and pred_z is not None and gt_z is not None
+                            and pred_z > 0.05 and gt_z > 0.05):
+                        ratio = pred_z / gt_z
+                        if 0.4 < ratio < 0.9 or 1.1 < ratio < 2.5:
+                            suggested = args.tag_size * ratio
+                            hud_lines.append(
+                                f"warn: try --tag-size {suggested*100:.1f} cm "
+                                f"(currently {args.tag_size*100:.1f} cm)"
+                            )
                 else:
                     hud_lines.append("no tag")
 
@@ -754,6 +800,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"infer p90        : {float(np.percentile(ring_infer, 90)):.2f} ms")
         print(f"fps p50          : {1000.0/np.median(ring_total):.2f}")
     if args.mode == "apriltag":
+        if seen_tag_ids:
+            ids_str = ", ".join(str(i) for i in sorted(seen_tag_ids))
+            filter_str = (f" (filter --tag-id {args.tag_id})"
+                          if args.tag_id is not None else "")
+            print(f"tag ids observed : {ids_str}{filter_str}")
         print(f"frames with tag  : {n_frames_with_tag} / {n_inferred}"
               f" ({100.0*n_frames_with_tag/max(n_inferred,1):.1f}%)")
         if abs_errs:

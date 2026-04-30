@@ -113,9 +113,46 @@ def _no_sync(*a, **kw):
     return None
 
 
+def _check_reprojection_math() -> None:
+    """Sanity-check the rt.reprojection_error_px helper.
+
+    Builds a known-perfect (R, t) by projecting 4 tag corners through the
+    intrinsics ourselves, then feeds those exact pixels back through the
+    helper - the result must be ~0 px. Then we deliberately wrong the tag
+    size and confirm the helper reports non-zero error.
+    """
+    calib = _stub_calib()
+    tag_size = 0.080
+    s = tag_size / 2.0
+    R = np.eye(3)
+    t = np.array([0.0, 0.0, 0.5])
+    pts_tag = np.array(
+        [[-s, -s, 0.0], [+s, -s, 0.0], [+s, +s, 0.0], [-s, +s, 0.0]],
+        dtype=np.float64,
+    )
+    pts_cam = pts_tag @ R.T + t
+    u = calib.fx * pts_cam[:, 0] / pts_cam[:, 2] + calib.cx
+    v = calib.fy * pts_cam[:, 1] / pts_cam[:, 2] + calib.cy
+    corners = np.stack([u, v], axis=1)
+
+    obs = rt.TagObservation(
+        tag_id=0, center_xy_orig=(calib.cx, calib.cy),
+        pose_R=R, pose_t_m=t, corners_orig=corners,
+    )
+    err_perfect = rt.reprojection_error_px(obs, calib, tag_size)
+    assert err_perfect < 1e-6, f"perfect-pose reproj err should be ~0, got {err_perfect}"
+
+    err_wrong = rt.reprojection_error_px(obs, calib, tag_size * 1.10)
+    assert err_wrong > 1.0, f"10%-wrong tag-size should produce >1 px error, got {err_wrong}"
+    print(f"[smoke] reproj math: perfect={err_perfect:.2e} px  "
+          f"10%-wrong-size={err_wrong:.2f} px  OK")
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="ffs_rt_smoke_"))
     print(f"[smoke] temp: {tmp}")
+
+    _check_reprojection_math()
 
     # Monkey-patch heavy bits.
     rt.D435i = _FakeCamera
@@ -176,7 +213,7 @@ def main() -> int:
     header = open(log_csv2).readline().strip().split(",")
     for col in ("frame_idx", "infer_ms", "fps_p50", "tag_id",
                 "gt_dist_m", "gt_z_m", "depth_pred_m",
-                "abs_err_m", "rel_err"):
+                "abs_err_m", "rel_err", "reproj_px"):
         assert col in header, f"apriltag CSV missing column {col!r} (header={header})"
 
     print("\n[smoke] OK - main loop, FPS/latency, CSV, recording all working.")
