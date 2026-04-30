@@ -182,7 +182,43 @@ python ./demo/visualize_2d_simple.py --model_type XL --num_refine 3
 | --allow_negative | False | set_true | allow negative disparity  | 
 
 
-### 3. Run 3D Visualization Demo
+### 3. Run D435i Realtime Benchmark
+
+`scripts/realtime_d435i.py` mirrors the Fast-FoundationStereo realtime runner:
+same `bench` / `apriltag` modes, same CSV columns, same recorded artifacts
+(`ir_left.png`, `ir_right.png`, `disp.npy`, `depth.npy`, `overlay.png`), and
+the same end-of-run summary.
+
+```bash
+conda activate s2m2
+pip install pyrealsense2 pupil-apriltags
+```
+
+```bash
+python scripts/realtime_d435i.py \
+    --mode bench \
+    --model_type S \
+    --log results/s2m2_bench.csv \
+    --record-dir results/s2m2_bench_frames
+```
+
+```bash
+python scripts/realtime_d435i.py \
+    --mode apriltag --tag-size 0.16 --tag-id 0 \
+    --model_type S \
+    --log results/s2m2_apriltag.csv \
+    --record-dir results/s2m2_apriltag_frames
+```
+
+For headless runs, add `--no-viz --max-frames 300`. The offline smoke test
+does not require a camera or GPU:
+
+```bash
+python scripts/_smoke_realtime.py
+```
+
+
+### 4. Run 3D Visualization Demo
 
 To visualize the 3D output interactively, run `demo/visualize_3d_booster.py` or `demo/visualize_3d_middlebury.py`
 

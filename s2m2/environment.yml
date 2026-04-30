@@ -115,9 +115,11 @@ dependencies:
       - protobuf==6.33.1
       - ptyprocess==0.7.0
       - pure-eval==0.2.3
+      - pupil-apriltags==1.0.4.post11
       - pygments==2.19.2
       - pyparsing==3.2.5
       - pyquaternion==0.9.9
+      - pyrealsense2==2.56.5.9235
       - python-dateutil==2.9.0.post0
       - pytz==2025.2
       - pyyaml==6.0.3
