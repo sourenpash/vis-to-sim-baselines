@@ -11,3 +11,5 @@ weights/*
 !weights/.gitkeep
 output/
 .claude/
+.smoke_deps/
+results/
