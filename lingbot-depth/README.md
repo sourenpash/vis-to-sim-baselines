@@ -145,6 +145,36 @@ result/
 
 **Available examples:** 8 example scenes (0-7) included in `examples/` directory.
 
+## D435i Realtime Benchmark
+
+`scripts/realtime_d435i.py` matches the depth benchmark runner contract used
+by the other model repos: `bench` / `apriltag` modes, the same CSV columns,
+recorded `depth.npy`, HUD overlay, and end-of-run summary. Internally this
+runner uses aligned D435i RGB + raw hardware depth because LingBot-Depth is an
+RGB-D refinement model.
+
+```bash
+conda activate lingbot-depth
+cd /media/souren/WorkSpace/vis_to_sim_baselines/lingbot-depth
+```
+
+```bash
+python scripts/realtime_d435i.py \
+  --mode apriltag \
+  --tag-size 0.16 \
+  --log results/lingbot_apriltag.csv \
+  --record-dir results/lingbot_apriltag_frames
+```
+
+For latency/FPS only:
+
+```bash
+python scripts/realtime_d435i.py \
+  --mode bench \
+  --log results/lingbot_bench.csv \
+  --record-dir results/lingbot_bench_frames
+```
+
 ## Method
 
 We introduce a masked depth modeling approach that learns robust RGB-D representations through self-supervised learning. The model employs a Vision Transformer encoder with specialized depth-aware attention mechanisms to jointly process RGB and depth inputs.
@@ -302,4 +332,3 @@ For questions, discussions, or collaborations:
 
 - **Issues**: Open an [issue](https://github.com/robbyant/lingbot-depth/issues) on GitHub
 - **Email**: Contact Dr. [Bin Tan](https://https://icetttb.github.io/) (tanbin.tan@antgroup.com) or Dr. [Nan Xue](https://xuenan.net) (xuenan.xue@antgroup.com)
-

@@ -20,6 +20,21 @@
 **/pretrain_weights/
 **/pretrained/
 **/checkpoint*/
+**/weights/
+
+# --- Benchmark outputs (recorded frames, per-run CSVs, depth/disparity dumps) ---
+# All model runners under DEPTH_BENCHMARK.md write their --record-dir / --log
+# artifacts into a sibling 'results/' (per-model) or 'output/' directory.
+# These are large (~MBs per frame) and meant to be regenerated, never committed.
+**/results/
+**/output/
+
+# --- Vendored-repo example videos (not needed for inference / training) ---
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
 
 # Python / tooling noise
 __pycache__/
